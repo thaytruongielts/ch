@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phonics Tương Tác</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Chosen Palette: Warm Neutrals (Nền #fdfaf6, Chữ chính #3a3a3a, Nhấn #8d9b6a & #c08552) -->
+    <!-- Application Structure Plan: SPA dạng tab. Thanh điều hướng chính chuyển đổi giữa các 'Chart' (6-9, 10, 11, 12, 13). Mỗi phần 'Chart' chứa một đoạn giới thiệu và một lưới các 'Thẻ Phonics' tương tác cho mỗi âm. Nhấp vào một thẻ sẽ hiển thị danh sách từ và nút 'Chế độ Luyện tập'. 'Chế độ Luyện tập' này (một modal) cho phép người dùng lướt qua các từ ví dụ từng từ một, biến danh sách tĩnh thành một công cụ học tập chủ động. Cấu trúc này được chọn vì tính tiện dụng, cho phép người dùng truy cập phi tuyến tính vào các chart phonics cụ thể và cung cấp một vòng lặp luyện tập tương tác, tập trung cho mỗi âm, hấp dẫn hơn định dạng bảng tĩnh của báo cáo. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Phonics Chart (ví dụ: Chart 10) -> Goal: Sắp xếp & Trình bày Âm -> Viz/Method: Phần nội dung dạng tab (div) chứa lưới Tailwind CSS 'Thẻ Phonics' (div được tạo kiểu). -> Interaction: Nhấp vào tab điều hướng (JS onclick) ẩn các phần khác và hiển thị phần liên quan. -> Justification: Nhóm các âm thanh một cách logic theo số chart ban đầu của chúng để điều hướng dễ dàng.
+        - Report Info: Mỗi Quy tắc Phonics (ví dụ: `ck` trong `back`) -> Goal: Thông báo & Dạy -> Viz/Method: 'Thẻ Phonics' (div) với tiêu đề rõ ràng. -> Interaction: Thẻ là một thành phần khép kín.
+        - Report Info: Danh sách 20 Từ Ví dụ -> Goal: Cung cấp Tài liệu Luyện tập -> Viz/Method: Ban đầu là một danh sách đơn giản (ul/li) bên trong thẻ.
+        - Report Info: 'Hoạt Động Tương Tác' (Hoạt động được đề xuất) -> Goal: Tạo Học tập Tích cực (Đã diễn giải) -> Viz/Method: Modal 'Chế độ Luyện tập' (HTML/CSS/JS). -> Interaction: Nút 'Bắt đầu Luyện tập' trên thẻ mở modal. Modal có các nút 'Trước'/'Tiếp' và hiển thị văn bản động (p id="practice-word"). JS tải mảng 20 từ cho âm đó và cập nhật hiển thị văn bản dựa trên bộ đếm. -> Justification: Điều này chuyển đổi *ý định* của cột 'hoạt động' trong báo cáo thành một tính năng SPA chức năng, có thể lặp lại và tương tác, tuân thủ quy tắc 'không SVG/Mermaid'.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <style>
+        :root {
+            --bg-main: #fdfaf6;
+            --text-dark: #3a3a3a;
+            --text-light: #5d5d5d;
+            --border-color: #e0dccc;
+            --accent-1: #8d9b6a;
+            --accent-1-hover: #7b8a5b;
+            --accent-2: #c08552;
+            --shadow-light: 0 4px 10px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 6px 15px rgba(0, 0, 0, 0.1);
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-dark);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .nav-tab {
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+        }
+        .nav-tab.active {
+            border-bottom-color: var(--accent-1);
+            color: var(--accent-1);
+            font-weight: 600;
+        }
+        .phonics-card {
+            background-color: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: var(--shadow-light);
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        .phonics-card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-4px);
+        }
+        .phonics-card h3 {
+            background-color: var(--bg-main);
+            border-bottom: 1px solid var(--border-color);
+            color: var(--accent-2);
+        }
+        .word-list {
+            columns: 2;
+            -webkit-columns: 2;
+            -moz-columns: 2;
+        }
+        .practice-btn {
+            background-color: var(--accent-1);
+            color: white;
+            transition: background-color 0.3s ease;
+        }
+        .practice-btn:hover {
+            background-color: var(--accent-1-hover);
+        }
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+        }
+        .modal-content {
+            background-color: #ffffff;
+            box-shadow: var(--shadow-md);
+        }
+        .modal-btn {
+            background-color: var(--accent-2);
+            color: white;
+            transition: background-color 0.3s ease;
+        }
+        .modal-btn:hover {
+            background-color: #a96f3c;
+        }
+        .modal-close-btn {
+            color: var(--text-light);
+            transition: color 0.3s ease;
+        }
+        .modal-close-btn:hover {
+            color: var(--text-dark);
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+    <div class="container mx-auto max-w-6xl">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold" style="color: var(--accent-2);">Phonics Tương Tác</h1>
+            <p class="text-lg mt-2" style="color: var(--text-light);">Khám phá và luyện tập các âm Phonics từ Chart 6 đến 13</p>
+        </header>
+
+        <nav id="main-nav" class="flex flex-wrap justify-center gap-4 md:gap-6 mb-8 pb-4 border-b-2" style="border-color: var(--border-color);">
+            <button class="nav-tab active text-lg px-4 py-2" data-target="chart-6-9">Charts 6-9</button>
+            <button class="nav-tab text-lg px-4 py-2" data-target="chart-10">Chart 10</button>
+            <button class="nav-tab text-lg px-4 py-2" data-target="chart-11">Chart 11</button>
+            <button class="nav-tab text-lg px-4 py-2" data-target="chart-12">Chart 12</button>
+            <button class="nav-tab text-lg px-4 py-2" data-target="chart-13">Chart 13</button>
+        </nav>
+
+        <main id="content-container">
+
+            <section id="chart-6-9" class="page-content">
+                <p class="text-lg mb-6 text-center" style="color: var(--text-light);">Phần này ôn tập các âm ghép cơ bản. Hãy khám phá các thẻ bên dưới để xem từ ví dụ và bắt đầu luyện tập phát âm từng từ.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">ck (back)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>aback</li> <li>attack</li> <li>back</li> <li>backpack</li> <li>beck</li> <li>bedrock</li> <li>black</li> <li>blackjack</li> <li>block</li> <li>brick</li> <li>brock</li> <li>buck</li> <li>bullock</li> <li>check</li> <li>chick</li> <li>chock</li> <li>chuck</li> <li>clack</li> <li>click</li> <li>clock</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="ck" data-title="ck (back)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">tr (track)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>trace</li> <li>traced</li> <li>tracer</li> <li>traces</li> <li>tracing</li> <li>track</li> <li>tracked</li> <li>tracker</li> <li>trackers</li> <li>tracking</li> <li>tracks</li> <li>tract</li> <li>traction</li> <li>tractor</li> <li>tractors</li> <li>tracts</li> <li>trade</li> <li>traded</li> <li>trader</li> <li>trades</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="tr" data-title="tr (track)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <section id="chart-10" class="page-content hidden">
+                <p class="text-lg mb-6 text-center" style="color: var(--text-light);">Chart 10 giới thiệu các âm đặc biệt như 'wh', 'tch' và các hậu tố phổ biến. Hãy chọn một âm để bắt đầu chế độ luyện tập flashcard.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">wh (whale/who)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>wheel</li> <li>whisk</li> <li>whim</li> <li>while</li> <li>whine</li> <li>whistle</li> <li>white</li> <li>why</li> <li>where</li> <li>whether</li> <li>which</li> <li>whisper</li> <li>whack</li> <li>wheat</li> <li>whirl</li> <li>whalebone</li> <li>who</li> <li>whom</li> <li>whose</li> <li>whole</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="wh" data-title="wh (whale/who)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">tch (patch)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>catch</li> <li>hatch</li> <li>latch</li> <li>match</li> <li>scratch</li> <li>watch</li> <li>fetch</li> <li>sketch</li> <li>switch</li> <li>twitch</li> <li>ditch</li> <li>pitch</li> <li>glitch</li> <li>witch</li> <li>blotch</li> <li>botch</li> <li>scotch</li> <li>clutch</li> <li>hutch</li> <li>crutch</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="tch" data-title="tch (patch)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">air/are (bear/care)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>hair</li> <li>chair</li> <li>fair</li> <li>lair</li> <li>pair</li> <li>stair</li> <li>dairy</li> <li>aerial</li> <li>affair</li> <li>repair</li> <li>despair</li> <li>impaired</li> <li>chairperson</li> <li>airy</li> <li>unfairly</li> <li>share</li> <li>rare</li> <li>scare</li> <li>square</li> <li>spare</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="air_are" data-title="air/are (bear/care)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">old (gold)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>cold</li> <li>hold</li> <li>fold</li> <li>mold</li> <li>scold</li> <li>sold</li> <li>told</li> <li>bold</li> <li>enrolled</li> <li>behold</li> <li>exploded</li> <li>twofold</li> <li>household</li> <li>threshold</li> <li>stronghold</li> <li>withhold</li> <li>stockholders</li> <li>old-fashioned</li> <li>goldfish</li> <li>unsold</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="old" data-title="old (gold)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">ild/ind (child/kind)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>mild</li> <li>wild</li> <li>shield</li> <li>rebuild</li> <li>grandchild</li> <li>bewildered</li> <li>mildly</li> <li>wildlife</li> <li>kind</li> <li>find</li> <li>mind</li> <li>blind</li> <li>grind</li> <li>wind</li> <li>behind</li> <li>remind</li> <li>mankind</li> <li>unlined</li> <li>financial</li> <li>kindness</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="ild_ind" data-title="ild/ind (child/kind)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">y/er (rainy/bigger)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>funny</li> <li>happy</li> <li>windy</li> <li>city</li> <li>party</li> <li>lady</li> <li>baby</li> <li>very</li> <li>dirty</li> <li>tiny</li> <li>better</li> <li>teacher</li> <li>water</li> <li>silver</li> <li>never</li> <li>flower</li> <li>summer</li> <li>winter</li> <li>paper</li> <li>driver</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="y_er" data-title="y/er (rainy/bigger)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="chart-11" class="page-content hidden">
+                <p class="text-lg mb-6 text-center" style="color: var(--text-light);">Chart 11 tập trung vào các âm mềm (soft sounds), nguyên âm đôi và các cách kết hợp âm đặc biệt. Khám phá các thẻ để xem 20 từ ví dụ cho mỗi âm.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">o/a (schwa)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>glove</li> <li>love</li> <li>cover</li> <li>oven</li> <li>money</li> <li>son</li> <li>onion</li> <li>among</li> <li>honey</li> <li>lemon</li> <li>banana</li> <li>sofa</li> <li>about</li> <li>alone</li> <li>again</li> <li>away</li> <li>afraid</li> <li>across</li> <li>aloud</li> <li>appeal</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="schwa" data-title="o/a (schwa)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">c/g (soft)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>cent</li> <li>nice</li> <li>ice</li> <li>cell</li> <li>lace</li> <li>face</li> <li>force</li> <li>pencil</li> <li>circus</li> <li>cinder</li> <li>recite</li> <li>celebrate</li> <li>ceiling</li> <li>license</li> <li>juice</li> <li>giant</li> <li>giraffe</li> <li>gem</li> <li>cage</li> <li>edge</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="soft_cg" data-title="c/g (soft)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">au/aw (faucet/saw)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>August</li> <li>fault</li> <li>cause</li> <li>taught</li> <li>vault</li> <li>launch</li> <li>astronaut</li> <li>applause</li> <li>saucer</li> <li>haunted</li> <li>crawl</li> <li>shawl</li> <li>draw</li> <li>hawk</li> <li>lawn</li> <li>straw</li> <li>paw</li> <li>awful</li> <li>drawback</li> <li>seesaw</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="au_aw" data-title="au/aw (faucet/saw)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">ea (leaf/thread)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>speak</li> <li>cream</li> <li>eat</li> <li>clean</li> <li>beat</li> <li>team</li> <li>mean</li> <li>each</li> <li>heat</li> <li>reach</li> <li>thread</li> <li>bread</li> <li>head</li> <li>steady</li> <li>meant</li> <li>breath</li> <li>feather</li> <li>instead</li> <li>ready</li> <li>treasure</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="ea" data-title="ea (leaf/thread)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">ie/ey (brownie/key)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>field</li> <li>grief</li> <li>chief</li> <li>piece</li> <li>thief</li> <li>brief</li> <li>belief</li> <li>diesel</li> <li>friend</li> <li>cried</li> <li>key</li> <li>money</li> <li>chimney</li> <li>journey</li> <li>trolley</li> <li>donkey</li> <li>jersey</li> <li>valley</li> <li>turkey</li> <li>honey</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="ie_ey" data-title="ie/ey (brownie/key)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">ph/ch (phone/chorus)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>photo</li> <li>graph</li> <li>phrase</li> <li>dolphin</li> <li>triumph</li> <li>alphabet</li> <li>sphere</li> <li>nephew</li> <li>microphone</li> <li>paragraph</li> <li>chorus</li> <li>school</li> <li>stomach</li> <li>character</li> <li>echo</li> <li>mechanic</li> <li>orchestra</li> <li>chemistry</li> <li>monarch</li> <li>technical</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="ph_ch" data-title="ph/ch (phone/chorus)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">ough/aught (thought/caught)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>bought</li> <li>brought</li> <li>fought</li> <li>sought</li> <li>ought</li> <li>nought</li> <li>thought</li> <li>caught</li> <li>taught</li> <li>fraught</li> <li>daughter</li> <li>slaughter</li> <li>distraught</li> <li>auto</li> <li>nautical</li> <li>auditorium</li> <li>authentication</li> <li>author</li> <li>applaud</li> <li>awesome</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="ough_aught" data-title="ough/aught (thought/caught)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <section id="chart-12" class="page-content hidden">
+                <p class="text-lg mb-6 text-center" style="color: var(--text-light);">Phần này khám phá các tiền tố, phụ âm câm và các cách kết hợp nguyên âm phức tạp hơn. Luyện tập từng từ một để nắm vững các quy tắc này.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">a/al (asleep/also)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>ago</li> <li>around</li> <li>among</li> <li>aboard</li> <li>alert</li> <li>alike</li> <li>alone</li> <li>aloud</li> <li>away</li> <li>alike</li> <li>also</li> <li>almost</li> <li>always</li> <li>already</li> <li>although</li> <li>altogether</li> <li>almighty</li> <li>alcoholic</li> <li>alphabet</li> <li>almond</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="a_al" data-title="a/al (asleep/also)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">be/en/un (prefixes)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>before</li> <li>behind</li> <li>belong</li> <li>beside</li> <li>between</li> <li>beloved</li> <li>beware</li> <li>befriend</li> <li>begun</li> <li>become</li> <li>enter</li> <li>enroll</li> <li>enable</li> <li>enemy</li> <li>endanger</li> <li>ensure</li> <li>undo</li> <li>unfair</li> <li>unlock</li> <li>unhappy</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="be_en_un" data-title="be/en/un (prefixes)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">wr/ould (wrinkled/could)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>write</li> <li>wrap</li> <li>wrist</li> <li>wreck</li> <li>wring</li> <li>wrath</li> <li>wrench</li> <li>wrinkle</li> <li>wrapped</li> <li>wreckage</li> <li>could</li> <li>should</li> <li>would</li> <li>couldn't</li> <li>wouldn't</li> <li>should've</li> <li>folder</li> <li>shoulder</li> <li>moulder</li> <li>would-be</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="wr_ould" data-title="wr/ould (wrinkled/could)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">oo (push)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>pull</li> <li>put</li> <li>full</li> <li>bush</li> <li>butcher</li> <li>cushion</li> <li>pudding</li> <li>bullet</li> <li>sugar</li> <li>wool</li> <li>wooded</li> <li>booklet</li> <li>youthful</li> <li>woman</li> <li>foot</li> <li>soot</li> <li>nook</li> <li>took</li> <li>shook</li> <li>hook</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="oo_push" data-title="oo (push)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">ou/ough (country/enough)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>young</li> <li>double</li> <li>trouble</li> <li>couple</li> <li>cousin</li> <li>nourish</li> <li>touch</li> <li>southern</li> <li>enough</li> <li>tough</li> <li>rough</li> <li>though</li> <li>although</li> <li>doughnut</li> <li>plough</li> <li>bough</li> <li>through</li> <li>borough</li> <li>thorough</li> <li>drought</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="ou_ough" data-title="ou/ough (country/enough)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">ar (carry)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>carriage</li> <li>narrow</li> <li>carrot</li> <li>married</li> <li>parade</li> <li>apparent</li> <li>barrel</li> <li>salary</li> <li>compare</li> <li>parent</li> <li>guarantee</li> <li>warrant</li> <li>quarrel</li> <li>marry</li> <li>embarrass</li> <li>tariff</li> <li>charity</li> <li>arbitrary</li> <li>barrier</li> <li>rarity</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="ar_carry" data-title="ar (carry)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">ire (fire)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>tire</li> <li>wire</li> <li>hire</li> <li>spire</li> <li>admire</li> <li>attire</li> <li>require</li> <li>entire</li> <li>desire</li> <li>vampire</li> <li>umpire</li> <li>inspire</li> <li>retire</li> <li>acquire</li> <li>choir</li> <li>pliers</li> <li>supplier</li> <li>attire</li> <li>inquire</li> <li>expire</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="ire" data-title="ire (fire)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <section id="chart-13" class="page-content hidden">
+                <p class="text-lg mb-6 text-center" style="color: var(--text-light);">Chart 13 là các hậu tố và âm cuối nâng cao. Đây là những khối xây dựng quan trọng cho các từ vựng phức tạp. Hãy luyện tập chúng thật kỹ!</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">-ful (beautiful)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>thankful</li> <li>helpful</li> <li>careful</li> <li>playful</li> <li>painful</li> <li>doubtful</li> <li>wonderful</li> <li>faithful</li> <li>powerful</li> <li>meaningful</li> <li>joyful</li> <li>plentiful</li> <li>colorful</li> <li>dutiful</li> <li>beautiful</li> <li>successful</li> <li>respectful</li> <li>powerful</li> <li>fearful</li> <li>hopeful</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="ful" data-title="-ful (beautiful)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">-tion/-sion (nation/television)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>station</li> <li>action</li> <li>fiction</li> <li>motion</li> <li>potion</li> <li>direction</li> <li>solution</li> <li>invention</li> <li>mission</li> <li>passion</li> <li>tension</li> <li>erosion</li> <li>explosion</li> <li>occasion</li> <li>inclusion</li> <li>illusion</li> <li>decision</li> <li>vision</li> <li>conclusion</li> <li>division</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="tion_sion" data-title="-tion/-sion (nation/television)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">eigh/y (eight/crystal)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>weight</li> <li>sleigh</li> <li>neighbor</li> <li>eighteen</li> <li>heighten</li> <li>freight</li> <li>brightly</li> <li>fight</li> <li>straight</li> <li>eight</li> <li>dizzy</li> <li>misty</li> <li>happy</li> <li>lucky</li> <li>silly</li> <li>funny</li> <li>berry</li> <li>penny</li> <li>thirty</li> <li>bully</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="eigh_y" data-title="eigh/y (eight/crystal)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">or/ar/er (sailor/dollar/cherry)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>doctor</li> <li>actor</li> <li>tailor</li> <li>mirror</li> <li>honor</li> <li>visitor</li> <li>senator</li> <li>author</li> <li>popular</li> <li>tractor</li> <li>grammar</li> <li>regular</li> <li>familiar</li> <li>pillar</li> <li>collar</li> <li>beggar</li> <li>proper</li> <li>whisper</li> <li>ever</li> <li>river</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="or_ar_er" data-title="or/ar/er (sailor/dollar/cherry)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                    <div class="phonics-card">
+                        <h3 class="text-xl font-semibold p-4">ture/war (pasture/warm)</h3>
+                        <div class="p-4">
+                            <ul class="word-list list-disc list-inside mb-4 text-sm" style="color: var(--text-dark);">
+                                <li>future</li> <li>lecture</li> <li>picture</li> <li>nature</li> <li>capture</li> <li>creature</li> <li>structure</li> <li>adventure</li> <li>furniture</li> <li>feature</li> <li>war</li> <li>ward</li> <li>quart</li> <li>quarter</li> <li>warn</li> <li>toward</li> <li>watch</li> <li>swap</li> <li>quality</li> <li>warrant</li>
+                            </ul>
+                            <button class="practice-btn w-full font-semibold py-2 px-4 rounded-lg" data-sound="ture_war" data-title="ture/war (pasture/warm)">Bắt đầu Luyện tập</button>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <div id="practice-modal" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <div class="modal-content w-full max-w-lg rounded-2xl p-6 relative">
+            <button id="close-modal-btn" class="modal-close-btn absolute top-4 right-5 text-3xl font-light">&times;</button>
+            
+            <h2 class="text-2xl font-bold mb-4" style="color: var(--accent-2);">
+                Luyện tập: <span id="modal-sound-title"></span>
+            </h2>
+
+            <div class="text-center my-8 md:my-12">
+                <p id="practice-word" class="text-5xl md:text-6xl font-bold" style="color: var(--text-dark);"></p>
+                <p id="practice-counter" class="text-lg mt-3" style="color: var(--text-light);"></p>
+            </div>
+
+            <div class="flex justify-between gap-4">
+                <button id="prev-word-btn" class="modal-btn w-full py-3 rounded-lg font-semibold text-lg">Trước</button>
+                <button id="next-word-btn" class="modal-btn w-full py-3 rounded-lg font-semibold text-lg">Tiếp theo</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const phonicsData = {
+                'ck': ['aback', 'attack', 'back', 'backpack', 'beck', 'bedrock', 'black', 'blackjack', 'block', 'brick', 'brock', 'buck', 'bullock', 'check', 'chick', 'chock', 'chuck', 'clack', 'click', 'clock'],
+                'tr': ['trace', 'traced', 'tracer', 'traces', 'tracing', 'track', 'tracked', 'tracker', 'trackers', 'tracking', 'tracks', 'tract', 'traction', 'tractor', 'tractors', 'tracts', 'trade', 'traded', 'trader', 'trades'],
+                'wh': ['wheel', 'whisk', 'whim', 'while', 'whine', 'whistle', 'white', 'why', 'where', 'whether', 'which', 'whisper', 'whack', 'wheat', 'whirl', 'whalebone', 'who', 'whom', 'whose', 'whole'],
+                'tch': ['catch', 'hatch', 'latch', 'match', 'scratch', 'watch', 'fetch', 'sketch', 'switch', 'twitch', 'ditch', 'pitch', 'glitch', 'witch', 'blotch', 'botch', 'scotch', 'clutch', 'hutch', 'crutch'],
+                'air_are': ['hair', 'chair', 'fair', 'lair', 'pair', 'stair', 'dairy', 'aerial', 'affair', 'repair', 'despair', 'impaired', 'chairperson', 'airy', 'unfairly', 'share', 'rare', 'scare', 'square', 'spare'],
+                'old': ['cold', 'hold', 'fold', 'mold', 'scold', 'sold', 'told', 'bold', 'enrolled', 'behold', 'exploded', 'twofold', 'household', 'threshold', 'stronghold', 'withhold', 'stockholders', 'old-fashioned', 'goldfish', 'unsold'],
+                'ild_ind': ['mild', 'wild', 'shield', 'rebuild', 'grandchild', 'bewildered', 'mildly', 'wildlife', 'kind', 'find', 'mind', 'blind', 'grind', 'wind', 'behind', 'remind', 'mankind', 'unlined', 'financial', 'kindness'],
+                'y_er': ['funny', 'happy', 'windy', 'city', 'party', 'lady', 'baby', 'very', 'dirty', 'tiny', 'better', 'teacher', 'water', 'silver', 'never', 'flower', 'summer', 'winter', 'paper', 'driver'],
+                'schwa': ['glove', 'love', 'cover', 'oven', 'money', 'son', 'onion', 'among', 'honey', 'lemon', 'banana', 'sofa', 'about', 'alone', 'again', 'away', 'afraid', 'across', 'aloud', 'appeal'],
+                'soft_cg': ['cent', 'nice', 'ice', 'cell', 'lace', 'face', 'force', 'pencil', 'circus', 'cinder', 'recite', 'celebrate', 'ceiling', 'license', 'juice', 'giant', 'giraffe', 'gem', 'cage', 'edge'],
+                'au_aw': ['August', 'fault', 'cause', 'taught', 'vault', 'launch', 'astronaut', 'applause', 'saucer', 'haunted', 'crawl', 'shawl', 'draw', 'hawk', 'lawn', 'straw', 'paw', 'awful', 'drawback', 'seesaw'],
+                'ea': ['speak', 'cream', 'eat', 'clean', 'beat', 'team', 'mean', 'each', 'heat', 'reach', 'thread', 'bread', 'head', 'steady', 'meant', 'breath', 'feather', 'instead', 'ready', 'treasure'],
+                'ie_ey': ['field', 'grief', 'chief', 'piece', 'thief', 'brief', 'belief', 'diesel', 'friend', 'cried', 'key', 'money', 'chimney', 'journey', 'trolley', 'donkey', 'jersey', 'valley', 'turkey', 'honey'],
+                'ph_ch': ['photo', 'graph', 'phrase', 'dolphin', 'triumph', 'alphabet', 'sphere', 'nephew', 'microphone', 'paragraph', 'chorus', 'school', 'stomach', 'character', 'echo', 'mechanic', 'orchestra', 'chemistry', 'monarch', 'technical'],
+                'ough_aught': ['bought', 'brought', 'fought', 'sought', 'ought', 'nought', 'thought', 'caught', 'taught', 'fraught', 'daughter', 'slaughter', 'distraught', 'auto', 'nautical', 'auditorium', 'authentication', 'author', 'applaud', 'awesome'],
+                'a_al': ['ago', 'around', 'among', 'aboard', 'alert', 'alike', 'alone', 'aloud', 'away', 'alike', 'also', 'almost', 'always', 'already', 'although', 'altogether', 'almighty', 'alcoholic', 'alphabet', 'almond'],
+                'be_en_un': ['before', 'behind', 'belong', 'beside', 'between', 'beloved', 'beware', 'befriend', 'begun', 'become', 'enter', 'enroll', 'enable', 'enemy', 'endanger', 'ensure', 'undo', 'unfair', 'unlock', 'unhappy'],
+                'wr_ould': ['write', 'wrap', 'wrist', 'wreck', 'wring', 'wrath', 'wrench', 'wrinkle', 'wrapped', 'wreckage', 'could', 'should', 'would', 'couldn\'t', 'wouldn\'t', 'should\'ve', 'folder', 'shoulder', 'moulder', 'would-be'],
+                'oo_push': ['pull', 'put', 'full', 'bush', 'butcher', 'cushion', 'pudding', 'bullet', 'sugar', 'wool', 'wooded', 'booklet', 'youthful', 'woman', 'foot', 'soot', 'nook', 'took', 'shook', 'hook'],
+                'ou_ough': ['young', 'double', 'trouble', 'couple', 'cousin', 'nourish', 'touch', 'southern', 'enough', 'tough', 'rough', 'though', 'although', 'doughnut', 'plough', 'bough', 'through', 'borough', 'thorough', 'drought'],
+                'ar_carry': ['carriage', 'narrow', 'carrot', 'married', 'parade', 'apparent', 'barrel', 'salary', 'compare', 'parent', 'guarantee', 'warrant', 'quarrel', 'marry', 'embarrass', 'tariff', 'charity', 'arbitrary', 'barrier', 'rarity'],
+                'ire': ['tire', 'wire', 'hire', 'spire', 'admire', 'attire', 'require', 'entire', 'desire', 'vampire', 'umpire', 'inspire', 'retire', 'acquire', 'choir', 'pliers', 'supplier', 'attire', 'inquire', 'expire'],
+                'ful': ['thankful', 'helpful', 'careful', 'playful', 'painful', 'doubtful', 'wonderful', 'faithful', 'powerful', 'meaningful', 'joyful', 'plentiful', 'colorful', 'dutiful', 'beautiful', 'successful', 'respectful', 'powerful', 'fearful', 'hopeful'],
+                'tion_sion': ['station', 'action', 'fiction', 'motion', 'potion', 'direction', 'solution', 'invention', 'mission', 'passion', 'tension', 'erosion', 'explosion', 'occasion', 'inclusion', 'illusion', 'decision', 'vision', 'conclusion', 'division'],
+                'eigh_y': ['weight', 'sleigh', 'neighbor', 'eighteen', 'heighten', 'freight', 'brightly', 'fight', 'straight', 'eight', 'dizzy', 'misty', 'happy', 'lucky', 'silly', 'funny', 'berry', 'penny', 'thirty', 'bully'],
+                'or_ar_er': ['doctor', 'actor', 'tailor', 'mirror', 'honor', 'visitor', 'senator', 'author', 'popular', 'tractor', 'grammar', 'regular', 'familiar', 'pillar', 'collar', 'beggar', 'proper', 'whisper', 'ever', 'river'],
+                'ture_war': ['future', 'lecture', 'picture', 'nature', 'capture', 'creature', 'structure', 'adventure', 'furniture', 'feature', 'war', 'ward', 'quart', 'quarter', 'warn', 'toward', 'watch', 'swap', 'quality', 'warrant']
+            };
+
+            let currentWords = [];
+            let currentIndex = 0;
+
+            const modal = document.getElementById('practice-modal');
+            const closeModalBtn = document.getElementById('close-modal-btn');
+            const practiceWordEl = document.getElementById('practice-word');
+            const practiceCounterEl = document.getElementById('practice-counter');
+            const modalSoundTitleEl = document.getElementById('modal-sound-title');
+            const prevWordBtn = document.getElementById('prev-word-btn');
+            const nextWordBtn = document.getElementById('next-word-btn');
+            const startPracticeBtns = document.querySelectorAll('.practice-btn');
+            const navTabs = document.querySelectorAll('.nav-tab');
+            const pageContents = document.querySelectorAll('.page-content');
+
+            function updatePracticeWord() {
+                practiceWordEl.textContent = currentWords[currentIndex];
+                practiceCounterEl.textContent = `${currentIndex + 1} / ${currentWords.length}`;
+            }
+
+            function openPracticeModal(e) {
+                const soundKey = e.target.dataset.sound;
+                const soundTitle = e.target.dataset.title;
+                
+                if (phonicsData[soundKey]) {
+                    currentWords = phonicsData[soundKey];
+                    currentIndex = 0;
+                    modalSoundTitleEl.textContent = soundTitle;
+                    updatePracticeWord();
+                    modal.classList.remove('hidden');
+                }
+            }
+
+            function closeModal() {
+                modal.classList.add('hidden');
+            }
+
+            function showPrevWord() {
+                currentIndex = (currentIndex - 1 + currentWords.length) % currentWords.length;
+                updatePracticeWord();
+            }
+
+            function showNextWord() {
+                currentIndex = (currentIndex + 1) % currentWords.length;
+                updatePracticeWord();
+            }
+
+            function switchTab(e) {
+                const targetId = e.target.dataset.target;
+
+                navTabs.forEach(tab => {
+                    tab.classList.remove('active');
+                });
+                e.target.classList.add('active');
+
+                pageContents.forEach(content => {
+                    if (content.id === targetId) {
+                        content.classList.remove('hidden');
+                    } else {
+                        content.classList.add('hidden');
+                    }
+                });
+            }
+
+            startPracticeBtns.forEach(btn => {
+                btn.addEventListener('click', openPracticeModal);
+            });
+
+            navTabs.forEach(tab => {
+                tab.addEventListener('click', switchTab);
+            });
+
+            closeModalBtn.addEventListener('click', closeModal);
+            prevWordBtn.addEventListener('click', showPrevWord);
+            nextWordBtn.addEventListener('click', showNextWord);
+
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>
